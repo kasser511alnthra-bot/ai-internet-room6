@@ -11,8 +11,8 @@ const TABS = [
   ['audit', 'Audit log']
 ]
 
-export default function AdminPage() {
-  const [tab, setTab] = useState('members')
+export default function AdminPage({ initialTab = 'members' } = {}) {
+  const [tab, setTab] = useState(initialTab)
   return (
     <div>
       <div className="tabs">

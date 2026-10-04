@@ -6,6 +6,7 @@ import HomePage from './pages/HomePage'
 import MyRecordsPage from './pages/MyRecordsPage'
 import TeamPage from './pages/TeamPage'
 import AdminPage from './pages/AdminPage'
+import NotificationBell from './components/NotificationBell'
 
 export default function App() {
   const [sb, setSb] = useState(null)
@@ -14,6 +15,9 @@ export default function App() {
   const [member, setMember] = useState(null)
   const [booted, setBooted] = useState(false)
   const [tab, setTab] = useState('home')
+  const [adminNav, setAdminNav] = useState({ tab: 'members', n: 0 })
+  const [pendingExcuses, setPendingExcuses] = useState([])
+  const [seenAt, setSeenAt] = useState(null)
 
   useEffect(() => {
     let subscription = null
@@ -48,6 +52,25 @@ export default function App() {
       setMember(data)
     })()
   }, [sb, session])
+
+  // Managers and admins are alerted about newly submitted excuses.
+  useEffect(() => {
+    if (!sb || !(member && (member.role === 'admin' || member.role === 'manager') && member.is_active && !member.deleted_at)) {
+      setPendingExcuses([])
+      return
+    }
+    const load = async () => {
+      const { data } = await sb.from('excuses')
+        .select('id,name_snapshot,code_snapshot,work_date,reason,created_at')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(20)
+      setPendingExcuses(data || [])
+    }
+    load()
+    const t = setInterval(load, 20000)
+    return () => clearInterval(t)
+  }, [sb, member])
 
   const signOut = async () => {
     await sb.auth.signOut()
@@ -102,13 +125,29 @@ export default function App() {
               <button className={tab === 'admin' ? 'navlink active' : 'navlink'} onClick={() => setTab('admin')}>Admin</button>
             )}
           </nav>
+          {(isAdmin || isManager) && (
+            <NotificationBell
+              pending={pendingExcuses}
+              unseen={pendingExcuses.filter((x) => !seenAt || new Date(x.created_at) > new Date(seenAt)).length}
+              onOpen={() => setSeenAt(new Date().toISOString())}
+              goToLabel={isAdmin ? 'Review' : 'View team'}
+              onGoTo={() => {
+                if (isAdmin) {
+                  setAdminNav((n) => ({ tab: 'review', n: n.n + 1 }))
+                  setTab('admin')
+                } else {
+                  setTab('team')
+                }
+              }}
+            />
+          )}
           <button className="btn ghost" onClick={signOut}>Sign out</button>
         </header>
         <main className="page">
           {tab === 'home' && <HomePage />}
           {tab === 'records' && <MyRecordsPage />}
           {tab === 'team' && <TeamPage />}
-          {tab === 'admin' && <AdminPage />}
+          {tab === 'admin' && <AdminPage initialTab={adminNav.tab} key={adminNav.n} />}
         </main>
       </div>
     )
